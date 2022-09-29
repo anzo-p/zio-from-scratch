@@ -10,6 +10,9 @@ sealed trait ZIO[+A] { self =>
   def flatMap[B](f: A => ZIO[B]): ZIO[B] =
     ZIO.FlatMap(self, f)
 
+  def fork: ZIO[Fiber[A]] =
+    ZIO.Fork(self)
+
   def map[B](f: A => B): ZIO[B] =
     flatMap { a =>
       ZIO.succeedNow(f(a))
@@ -40,12 +43,21 @@ object ZIO {
       }
   }
 
+  private case class Fork[A](zio: ZIO[A]) extends ZIO[Fiber[A]] {
+    override def run(callback: Fiber[A] => Unit): Unit = {
+      val fiber = new FiberImpl(zio)
+      fiber.start()
+      callback(fiber)
+    }
+  }
+
   private case class Succeed[A](value: A) extends ZIO[A] {
     override def run(callback: A => Unit): Unit =
       callback(value)
   }
 
-  private def succeedNow[A](value: A): ZIO[A] =
+  // should be private
+  def succeedNow[A](value: A): ZIO[A] =
     ZIO.Succeed(value)
 
   def async[A](register: (A => Any) => Any): ZIO[A] =
