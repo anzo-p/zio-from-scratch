@@ -1,7 +1,11 @@
 package myZio
 
 sealed trait ZIO[+A] { self =>
+
   def run(callback: A => Unit): Unit
+
+  def as[B](value: => B): ZIO[B] =
+    self.map(_ => value)
 
   def flatMap[B](f: A => ZIO[B]): ZIO[B] =
     ZIO.FlatMap(self, f)
