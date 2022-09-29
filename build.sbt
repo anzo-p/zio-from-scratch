@@ -6,3 +6,8 @@ lazy val root = (project in file("."))
   .settings(
     name := "zio-from-scratch"
   )
+
+libraryDependencies ++= Seq(
+  "org.scalatest"     %% "scalatest"       % "3.2.10"   % Test,
+  "org.scalatestplus" %% "scalacheck-1-15" % "3.2.11.0" % Test
+)
