@@ -9,5 +9,5 @@ object AppAs extends ZIOApp {
       .flatMap { cat =>
         ZIO.succeed(println(s"cheers to $cat"))
       }
-      .as("awesome") // same as .map(_ => "awesome")
+      .as("awesome") // same as .map(_ => "awesome") or for { .. } yield "awesome"
 }

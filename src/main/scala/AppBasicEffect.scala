@@ -1,13 +1,11 @@
-import models.Cat
 import myZio.{ZIO, ZIOApp}
 
 object AppBasicEffect extends ZIOApp {
-  val eagerCat: ZIO[Cat] = ZIO.succeedNow(Cat("jizzy", 5)) // mustn't print
+  // eager IO not wanted, ZIO couldn't catch exceptions,
+  // also introduces a bug space of unexpected IO timing
+  //val eagerIO: ZIO[Unit] = ZIO.succeedNow(println("unintentional IO"))
 
-  // eager IO not wanted, the effect couldn't catch exceptions and also introduces a bug space of IO of unexpected timing
-  val eagerIO: ZIO[Unit] = ZIO.succeedNow(println("unintentional IO")) // should intentionally print
-
-  val lazyIO: ZIO[Unit] = ZIO.succeed(println("jazzy")) // must print, but will do so lazily
+  val lazyIO: ZIO[Unit] = ZIO.succeed(println("jazzy"))
 
   override def run: ZIO[Unit] = lazyIO
 }

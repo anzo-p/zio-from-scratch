@@ -15,12 +15,11 @@ sealed trait ZIO[+A] { self =>
       ZIO.succeedNow(f(a))
     }
 
-  def zip[B](that: ZIO[B]): ZIO[(A, B)] = {
+  def zip[B](that: ZIO[B]): ZIO[(A, B)] =
     for {
       a <- self
       b <- that
     } yield (a, b)
-  }
 }
 
 object ZIO {
@@ -46,11 +45,11 @@ object ZIO {
       callback(value)
   }
 
+  private def succeedNow[A](value: A): ZIO[A] =
+    ZIO.Succeed(value)
+
   def async[A](register: (A => Any) => Any): ZIO[A] =
     ZIO.Async(register)
-
-  def succeedNow[A](value: A): ZIO[A] =
-    ZIO.Succeed(value)
 
   def succeed[A](value: => A): ZIO[A] =
     ZIO.Effect(() => value)
