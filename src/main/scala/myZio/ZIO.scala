@@ -23,6 +23,13 @@ sealed trait ZIO[+A] { self =>
       a <- self
       b <- that
     } yield (a, b)
+
+  def zipPar[B](that: ZIO[B]): ZIO[(A, B)] =
+    for {
+      fib1 <- self.fork
+      b    <- that
+      a    <- fib1.join
+    } yield (a, b)
 }
 
 object ZIO {
