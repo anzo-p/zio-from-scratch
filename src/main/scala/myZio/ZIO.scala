@@ -11,10 +11,16 @@ sealed trait ZIO[+A] { self =>
     ZIO.FlatMap(self, f)
 
   def map[B](f: A => B): ZIO[B] =
-    ZIO.Map(self, f)
+    flatMap { a =>
+      ZIO.succeedNow(f(a))
+    }
 
-  def zip[B](that: ZIO[B]): ZIO[(A, B)] =
-    ZIO.Zip(self, that)
+  def zip[B](that: ZIO[B]): ZIO[(A, B)] = {
+    for {
+      a <- self
+      b <- that
+    } yield (a, b)
+  }
 }
 
 object ZIO {
@@ -30,24 +36,9 @@ object ZIO {
       }
   }
 
-  private case class Map[A, B](zio: ZIO[A], f: A => B) extends ZIO[B] {
-    override def run(callback: B => Unit): Unit = {
-      zio.run { a =>
-        callback(f(a))
-      }
-    }
-  }
-
   private case class Succeed[A](value: A) extends ZIO[A] {
     override def run(callback: A => Unit): Unit =
       callback(value)
-  }
-
-  private case class Zip[A, B](left: ZIO[A], right: ZIO[B]) extends ZIO[(A, B)] {
-    override def run(callback: ((A, B)) => Unit): Unit =
-      left.run(a => {
-        right.run(b => callback(a, b))
-      })
   }
 
   def succeedNow[A](value: A): ZIO[A] =
