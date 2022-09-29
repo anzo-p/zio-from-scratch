@@ -1,4 +1,4 @@
-package zio
+package myZio
 
 trait ZIOApp {
   def run: ZIO[Any]

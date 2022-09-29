@@ -1,4 +1,4 @@
-import zio.{ZIO, ZIOApp}
+import myZio.{ZIO, ZIOApp}
 
 object AppZip extends ZIOApp {
   override def run: ZIO[(Int, String)] =

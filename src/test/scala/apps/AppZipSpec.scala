@@ -2,7 +2,7 @@ package apps
 
 import utils.ArbitraryTestData.sample
 import utils.BaseSpec
-import zio.ZIO
+import myZio.ZIO
 
 class AppZipSpec extends BaseSpec {
 
@@ -13,7 +13,7 @@ class AppZipSpec extends BaseSpec {
 
     "make a tuple out of two ZIOs in their Zipping order" in {
       testZio.run { result =>
-        result.toString mustBe (fst, snd).toString
+        result mustBe (fst, snd)
       }
     }
   }

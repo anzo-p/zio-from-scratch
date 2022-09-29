@@ -1,5 +1,5 @@
 import models.Cat
-import zio.{ZIO, ZIOApp}
+import myZio.{ZIO, ZIOApp}
 
 object AppBasicEffect extends ZIOApp {
   val eagerCat: ZIO[Cat] = ZIO.succeedNow(Cat("jizzy", 5)) // mustn't print
