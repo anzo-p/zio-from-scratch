@@ -2,7 +2,7 @@ package myZio
 
 trait ZIOApp {
 
-  val await: Int = 1000
+  val await: Int = 1
 
   def run: ZIO[Any]
 
