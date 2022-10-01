@@ -75,22 +75,23 @@ object ZIO {
 
   case class Async[A](register: (A => Any) => Any) extends ZIO[Nothing, A]
 
-  case class Effect[A](f: () => A) extends ZIO[Nothing, A]
-
   case class FlatMap[E, A, B](zio: ZIO[E, A], f: A => ZIO[E, B]) extends ZIO[E, B]
 
   case class Fork[E, A](zio: ZIO[E, A]) extends ZIO[Nothing, Fiber[E, A]]
 
   case class Shift(executor: ExecutionContext) extends ZIO[Nothing, Unit]
 
-  case class Succeed[A](value: A) extends ZIO[Nothing, A]
+  case class Succeed[A](f: () => A) extends ZIO[Nothing, A]
+
+  case class SucceedNow[A](value: A) extends ZIO[Nothing, A]
 
   def async[A](register: (A => Any) => Any): ZIO[Nothing, A] =
     ZIO.Async(register)
 
   def succeed[A](value: => A): ZIO[Nothing, A] =
-    ZIO.Effect(() => value)
+    ZIO.Succeed(() => value)
 
+  // should be private
   def succeedNow[A](value: A): ZIO[Nothing, A] =
-    ZIO.Succeed(value)
+    ZIO.SucceedNow(value)
 }

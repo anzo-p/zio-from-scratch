@@ -115,9 +115,6 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
             }
           }
 
-        case ZIO.Effect(thunk) =>
-          continue(thunk())
-
         case ZIO.FlatMap(zio, continuation) =>
           stack.push(continuation.asInstanceOf[Continuation])
           currentZIO = zio
@@ -130,7 +127,10 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
           currentExecutor = executor
           continue(())
 
-        case ZIO.Succeed(value) =>
+        case ZIO.Succeed(thunk) =>
+          continue(thunk())
+
+        case ZIO.SucceedNow(value) =>
           continue(value)
       }
     }
