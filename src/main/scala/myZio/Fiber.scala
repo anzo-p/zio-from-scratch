@@ -1,23 +1,41 @@
 package myZio
 
 import java.util.concurrent.atomic.AtomicReference
+import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 
 sealed trait Fiber[+A] {
 
-  def join: ZIO[A]
+  def interrupt: ZIO[Unit]
 
-  def start(): Unit
+  def join: ZIO[A]
 }
 
-class FiberImpl[A](zio: ZIO[A]) extends Fiber[A] {
+class FiberContext[A](zio: ZIO[A]) extends Fiber[A] {
 
   sealed trait FiberState
   final case class Running(callbacks: List[A => Any]) extends FiberState
   final case class Done(result: A) extends FiberState
 
+  type Erased         = ZIO[Any]
+  type ErasedCallback = Any => Unit
+  type Continuation   = Any => Erased
+
+  var currentZIO: Erased = erase(zio)
+
+  var loop = true
+
   var state: AtomicReference[FiberState] =
     new AtomicReference(Running(List.empty))
+
+  val stack = new mutable.Stack[Continuation]()
+
+  override def interrupt: ZIO[Unit] = ???
+
+  override def join: ZIO[A] =
+    ZIO.async { callback =>
+      await(callback)
+    }
 
   def await(callback: A => Any): Unit = {
     var loop = true
@@ -35,6 +53,16 @@ class FiberImpl[A](zio: ZIO[A]) extends Fiber[A] {
       }
     }
   }
+
+  def continue(value: Any): Unit =
+    if (stack.isEmpty) {
+      stop()
+      complete(value.asInstanceOf[A])
+    }
+    else {
+      val continuation = stack.pop()
+      currentZIO = continuation(value)
+    }
 
   def complete(result: A): Unit = {
     var loop = true
@@ -56,13 +84,56 @@ class FiberImpl[A](zio: ZIO[A]) extends Fiber[A] {
     }
   }
 
-  override def join: ZIO[A] =
-    ZIO.async { callback =>
-      await(callback)
+  def erase[B](zio: ZIO[B]): Erased =
+    zio
+
+  def eraseCallback[B](cb: B => Unit): ErasedCallback =
+    cb.asInstanceOf[ErasedCallback]
+
+  def resume(): Unit = {
+    loop = true
+    run()
+  }
+
+  def stop(): Unit =
+    loop = false
+
+  def run(): Unit =
+    while (loop) {
+      currentZIO match {
+
+        case ZIO.Async(register) =>
+          if (stack.isEmpty) {
+            stop()
+            register { a =>
+              complete(a.asInstanceOf[A])
+            }
+          }
+          else {
+            stop()
+            register { a =>
+              currentZIO = ZIO.succeedNow(a)
+              resume()
+            }
+          }
+
+        case ZIO.Effect(thunk) =>
+          continue(thunk())
+
+        case ZIO.FlatMap(zio, continuation) =>
+          stack.push(continuation.asInstanceOf[Continuation])
+          currentZIO = zio
+
+        case ZIO.Fork(zio) =>
+          val fiber = new FiberContext(zio)
+          continue(fiber)
+
+        case ZIO.Succeed(value) =>
+          continue(value)
+      }
     }
 
-  override def start(): Unit =
-    ExecutionContext.global.execute { () =>
-      zio.run(complete)
-    }
+  ExecutionContext.global.execute { () =>
+    run()
+  }
 }

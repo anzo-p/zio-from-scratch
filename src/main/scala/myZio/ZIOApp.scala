@@ -2,15 +2,10 @@ package myZio
 
 trait ZIOApp {
 
-  val await: Int = 1
-
   def run: ZIO[Any]
 
   def main(args: Array[String]): Unit = {
-    run.run { result =>
-      println(s"ZIO evaluated and the result is $result")
-    }
-
-    Thread.sleep(await)
+    val result = run.unsafeRunSync
+    println(s"ZIO evaluated and the result is $result")
   }
 }

@@ -4,8 +4,6 @@ import scala.util.Random
 
 object AppFork extends ZIOApp {
 
-  override val await = 3000
-
   def asyncZIO(n: Int): ZIO[Int] = ZIO.async[Int] { complete =>
     println(s"async $n begins")
     Thread.sleep(1000 + Random.nextInt(1000))
