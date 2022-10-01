@@ -1,11 +1,14 @@
 package myZio
 
+import myZio.ZIO.defaultExecutor
+
 import java.util.concurrent.CountDownLatch
+import scala.concurrent.ExecutionContext
 
 sealed trait ZIO[+A] { self =>
 
   final private def unsafeRunFiber(): Fiber[A] =
-    new FiberContext(self)
+    new FiberContext(self, defaultExecutor)
 
   final def unsafeRunSync: A = {
     var result: A = null.asInstanceOf[A]
@@ -41,6 +44,9 @@ sealed trait ZIO[+A] { self =>
     if (n <= 0) ZIO.succeedNow()
     else self *> repeatN(n - 1)
 
+  def shift(executor: ExecutionContext): ZIO.Shift =
+    ZIO.Shift(executor)
+
   def zip[B](that: ZIO[B]): ZIO[(A, B)] =
     zipWith(that)(_ -> _)
 
@@ -65,6 +71,8 @@ sealed trait ZIO[+A] { self =>
 }
 
 object ZIO {
+  private val defaultExecutor = ExecutionContext.global
+
   case class Async[A](register: (A => Any) => Any) extends ZIO[A]
 
   case class Effect[A](f: () => A) extends ZIO[A]
@@ -72,6 +80,8 @@ object ZIO {
   case class FlatMap[A, B](zio: ZIO[A], f: A => ZIO[B]) extends ZIO[B]
 
   case class Fork[A](zio: ZIO[A]) extends ZIO[Fiber[A]]
+
+  case class Shift(executor: ExecutionContext) extends ZIO[Unit]
 
   case class Succeed[A](value: A) extends ZIO[A]
 

@@ -11,15 +11,16 @@ sealed trait Fiber[+A] {
   def join: ZIO[A]
 }
 
-class FiberContext[A](zio: ZIO[A]) extends Fiber[A] {
+private class FiberContext[A](zio: ZIO[A], initExecutor: ExecutionContext) extends Fiber[A] {
 
   sealed trait FiberState
   final case class Running(callbacks: List[A => Any]) extends FiberState
   final case class Done(result: A) extends FiberState
 
-  type Erased         = ZIO[Any]
-  type ErasedCallback = Any => Unit
-  type Continuation   = Any => Erased
+  type Erased       = ZIO[Any]
+  type Continuation = Any => Erased
+
+  var currentExecutor: ExecutionContext = initExecutor
 
   var currentZIO: Erased = erase(zio)
 
@@ -87,9 +88,6 @@ class FiberContext[A](zio: ZIO[A]) extends Fiber[A] {
   def erase[B](zio: ZIO[B]): Erased =
     zio
 
-  def eraseCallback[B](cb: B => Unit): ErasedCallback =
-    cb.asInstanceOf[ErasedCallback]
-
   def resume(): Unit = {
     loop = true
     run()
@@ -125,15 +123,19 @@ class FiberContext[A](zio: ZIO[A]) extends Fiber[A] {
           currentZIO = zio
 
         case ZIO.Fork(zio) =>
-          val fiber = new FiberContext(zio)
+          val fiber = new FiberContext(zio, currentExecutor)
           continue(fiber)
+
+        case ZIO.Shift(executor) =>
+          currentExecutor = executor
+          continue(())
 
         case ZIO.Succeed(value) =>
           continue(value)
       }
     }
 
-  ExecutionContext.global.execute { () =>
+  currentExecutor.execute { () =>
     run()
   }
 }
