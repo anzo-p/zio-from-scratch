@@ -4,20 +4,20 @@ import java.util.concurrent.atomic.AtomicReference
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 
-sealed trait Fiber[+A] {
+sealed trait Fiber[+E, +A] {
 
-  def interrupt: ZIO[Unit]
+  def interrupt: ZIO[Nothing, Unit]
 
-  def join: ZIO[A]
+  def join: ZIO[E, A]
 }
 
-private class FiberContext[A](zio: ZIO[A], initExecutor: ExecutionContext) extends Fiber[A] {
+private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext) extends Fiber[E, A] {
 
   sealed trait FiberState
   final case class Running(callbacks: List[A => Any]) extends FiberState
   final case class Done(result: A) extends FiberState
 
-  type Erased       = ZIO[Any]
+  type Erased       = ZIO[Any, Any]
   type Continuation = Any => Erased
 
   var currentExecutor: ExecutionContext = initExecutor
@@ -31,9 +31,9 @@ private class FiberContext[A](zio: ZIO[A], initExecutor: ExecutionContext) exten
 
   val stack = new mutable.Stack[Continuation]()
 
-  override def interrupt: ZIO[Unit] = ???
+  override def interrupt: ZIO[Nothing, Unit] = ???
 
-  override def join: ZIO[A] =
+  override def join: ZIO[E, A] =
     ZIO.async { callback =>
       await(callback)
     }
@@ -85,7 +85,7 @@ private class FiberContext[A](zio: ZIO[A], initExecutor: ExecutionContext) exten
     }
   }
 
-  def erase[B](zio: ZIO[B]): Erased =
+  def erase[E1 >: E, B](zio: ZIO[E1, B]): Erased =
     zio
 
   def resume(): Unit = {
