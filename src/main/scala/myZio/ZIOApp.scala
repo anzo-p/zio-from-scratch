@@ -6,6 +6,6 @@ trait ZIOApp {
 
   def main(args: Array[String]): Unit = {
     val result = run.unsafeRunSync
-    println(s"ZIO evaluated and the result is $result")
+    println(s"[ZIOApp Main] - ZIO evaluated and the result is $result")
   }
 }

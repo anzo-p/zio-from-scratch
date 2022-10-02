@@ -5,9 +5,9 @@ import scala.util.Random
 object AppFork extends ZIOApp {
 
   def asyncZIO(n: Int): ZIO[Nothing, Int] = ZIO.async[Int] { complete =>
-    println(s"async $n begins")
+    println(s"[App Main] - async $n begins")
     Thread.sleep(1000 + Random.nextInt(1000))
-    println(s"async $n has result")
+    println(s"[App Main] - async $n has result")
     complete(Random.nextInt())
   }
 

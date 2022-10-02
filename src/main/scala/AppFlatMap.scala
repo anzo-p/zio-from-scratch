@@ -7,7 +7,7 @@ object AppFlatMap extends ZIOApp {
   override def run: ZIO[Nothing, Any] =
     for {
       _ <- zioTuple.flatMap { tuple =>
-            ZIO.succeed(println(s"cheers to the tuple $tuple"))
+            ZIO.succeed(println(s"[App Main] - cheers to the tuple $tuple"))
           }
 
       name <- ZIO.succeed("bandit")
