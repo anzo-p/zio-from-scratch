@@ -49,8 +49,10 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
         case oldState @ Running(callbacks) =>
           val newState = Running(callback :: callbacks)
           loopState = !state.compareAndSet(oldState, newState)
+          println(s"[FiberContext] - await/running - prepended $callback to $callbacks")
 
         case Done(result) =>
+          println(s"[FiberContext] - await/done - ready with $result - callback with $callback")
           callback(result)
           loopState = false
       }
@@ -66,6 +68,7 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
           if (state.compareAndSet(oldState, Done(result))) {
             loopState = false
             callbacks.foreach { cb =>
+              println(s"[FiberContext] - complete - ready with $result - callback with $cb")
               cb(result)
             }
           }
@@ -91,6 +94,7 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
           case foldType: ErasedFold =>
             errorHandler = foldType
             loopStack    = false
+            println(s"[FiberContext] - found errorHandler $foldType")
 
           case _ =>
         }
@@ -107,24 +111,26 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
       if (stack.isEmpty) {
         loopStack = false
         complete(Right(value.asInstanceOf[A]))
+        println(s"[FiberContext] - complete with ${Right(value.asInstanceOf[A])}")
       }
       else {
         val continuation = stack.pop()
         currentZIO = continuation(value)
+        println(s"[FiberContext] - continue with $currentZIO")
       }
 
     while (loopStack) {
+      println(s"[FiberContext] - run current zio - $currentZIO")
       currentZIO match {
 
         case ZIO.Async(register) =>
+          loopStack = false
           if (stack.isEmpty) {
-            loopStack = false
             register { a =>
               complete(Right(a.asInstanceOf[A]))
             }
           }
           else {
-            loopStack = false
             register { a =>
               currentZIO = ZIO.succeedNow(a)
               run()
