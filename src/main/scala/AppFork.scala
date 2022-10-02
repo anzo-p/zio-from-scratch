@@ -23,3 +23,9 @@ object AppFork extends ZIOApp {
 
     } yield s"reduced into $ans1, $ans2, and $ans3"
 }
+
+/*
+  interruption (of fibers?)
+  environment
+  full structure with R, -E, +A
+ */

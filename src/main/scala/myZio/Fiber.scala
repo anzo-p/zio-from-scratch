@@ -27,11 +27,9 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
 
   var currentZIO: Erased = erase(zio)
 
-  var loopStack = true
-
   val stack = new mutable.Stack[Continuation]()
 
-  var state: AtomicReference[FiberState] =
+  val state: AtomicReference[FiberState] =
     new AtomicReference(Running(List.empty))
 
   override def interrupt: ZIO[Nothing, Unit] = ???
@@ -46,10 +44,9 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
   def await(callback: Either[E, A] => Any): Unit = {
     var loopState = true
     while (loopState) {
-      val oldState = state.get()
-      oldState match {
+      state.get() match {
 
-        case Running(callbacks) =>
+        case oldState @ Running(callbacks) =>
           val newState = Running(callback :: callbacks)
           loopState = !state.compareAndSet(oldState, newState)
 
@@ -61,14 +58,13 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
   }
 
   def complete(result: Either[E, A]): Unit = {
-    var loopStates = true
-    while (loopStates) {
-      val oldState = state.get()
-      oldState match {
+    var loopState = true
+    while (loopState) {
+      state.get() match {
 
-        case Running(callbacks) =>
+        case oldState @ Running(callbacks) =>
           if (state.compareAndSet(oldState, Done(result))) {
-            loopStates = false
+            loopState = false
             callbacks.foreach { cb =>
               cb(result)
             }
@@ -79,16 +75,6 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
       }
     }
   }
-
-  def continue(value: Any): Unit =
-    if (stack.isEmpty) {
-      stop()
-      complete(Right(value.asInstanceOf[A]))
-    }
-    else {
-      val continuation = stack.pop()
-      currentZIO = continuation(value)
-    }
 
   def erase[E1 >: E, B](zio: ZIO[E1, B]): Erased =
     zio
@@ -114,27 +100,34 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
     errorHandler
   }
 
-  def resume(): Unit = {
-    loopStack = true
-    run()
-  }
+  def run(): Unit = {
+    var loopStack = true
 
-  def run(): Unit =
+    def continue(value: Any): Unit =
+      if (stack.isEmpty) {
+        loopStack = false
+        complete(Right(value.asInstanceOf[A]))
+      }
+      else {
+        val continuation = stack.pop()
+        currentZIO = continuation(value)
+      }
+
     while (loopStack) {
       currentZIO match {
 
         case ZIO.Async(register) =>
           if (stack.isEmpty) {
-            stop()
+            loopStack = false
             register { a =>
               complete(Right(a.asInstanceOf[A]))
             }
           }
           else {
-            stop()
+            loopStack = false
             register { a =>
               currentZIO = ZIO.succeedNow(a)
-              resume()
+              run()
             }
           }
 
@@ -170,9 +163,7 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
           continue(value)
       }
     }
-
-  def stop(): Unit =
-    loopStack = false
+  }
 
   currentExecutor.execute { () =>
     run()
