@@ -1,28 +1,26 @@
 package myZio
 
-import myZio.ZIO.defaultExecutor
-
 import java.util.concurrent.CountDownLatch
 import scala.concurrent.ExecutionContext
 
 sealed trait ZIO[+E, +A] { self =>
 
   final private def unsafeRunFiber(): Fiber[E, A] =
-    new FiberContext(self, defaultExecutor)
+    new FiberContext(self, ZIO.defaultExecutor)
 
-  final def unsafeRunSync: Either[E, A] = {
-    var result = null.asInstanceOf[Either[E, A]]
+  final def unsafeRunSync: Exit[E, A] = {
+    var result = null.asInstanceOf[Exit[E, A]]
     val latch  = new CountDownLatch(1)
 
-    val zio = self.foldZIO(
-      e =>
+    val zio = self.foldCauseZIO(
+      cause =>
         ZIO.succeed {
-          result = Left(e)
+          result = Exit.failCause(cause)
           latch.countDown()
         },
       a =>
         ZIO.succeed {
-          result = Right(a)
+          result = Exit.succeed(a)
           latch.countDown()
         }
     )
@@ -51,6 +49,14 @@ sealed trait ZIO[+E, +A] { self =>
     )
 
   def foldZIO[EU, B](failure: E => ZIO[EU, B], success: A => ZIO[EU, B]): ZIO[EU, B] =
+    foldCauseZIO({
+      case Cause.Fail(e) =>
+        failure(e)
+      case Cause.Die(throwable) =>
+        ZIO.failCause(Cause.Die(throwable))
+    }, success)
+
+  def foldCauseZIO[EU, B](failure: Cause[E] => ZIO[EU, B], success: A => ZIO[EU, B]): ZIO[EU, B] =
     ZIO.Fold(self, failure, success)
 
   def fork: ZIO[Nothing, Fiber[E, A]] =
@@ -96,11 +102,11 @@ object ZIO {
 
   case class Async[A](register: (A => Any) => Any) extends ZIO[Nothing, A]
 
-  case class Fail[E](e: () => E) extends ZIO[E, Nothing]
+  case class Fail[E](e: () => Cause[E]) extends ZIO[E, Nothing]
 
   case class FlatMap[E, A, B](zio: ZIO[E, A], f: A => ZIO[E, B]) extends ZIO[E, B]
 
-  case class Fold[E, EU, A, B](zio: ZIO[E, A], failure: E => ZIO[EU, B], success: A => ZIO[EU, B])
+  case class Fold[E, EU, A, B](zio: ZIO[E, A], failure: Cause[E] => ZIO[EU, B], success: A => ZIO[EU, B])
       extends ZIO[EU, B]
       with (A => ZIO[EU, B]) {
     override def apply(a: A): ZIO[EU, B] = success(a)
@@ -117,8 +123,19 @@ object ZIO {
   def async[A](register: (A => Any) => Any): ZIO[Nothing, A] =
     Async(register)
 
+  def done[E, A](exit: Exit[E, A]): ZIO[E, A] =
+    exit match {
+      case Exit.Success(a) =>
+        succeedNow(a)
+      case Exit.Failure(e) =>
+        failCause(e)
+    }
+
   def fail[E](e: => E): ZIO[E, Nothing] =
-    Fail(() => e)
+    failCause(Cause.Fail(e))
+
+  def failCause[E](cause: Cause[E]): ZIO[E, Nothing] =
+    Fail(() => cause)
 
   def fromEither[E, A](either: Either[E, A]): ZIO[E, A] =
     either.fold(

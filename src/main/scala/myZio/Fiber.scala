@@ -16,8 +16,8 @@ sealed trait Fiber[+E, +A] {
 private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext) extends Fiber[E, A] {
 
   sealed trait FiberState
-  final case class Running(callbacks: List[Either[E, A] => Any]) extends FiberState
-  final case class Done(result: Either[E, A]) extends FiberState
+  final case class Running(callbacks: List[Exit[E, A] => Any]) extends FiberState
+  final case class Done(result: Exit[E, A]) extends FiberState
 
   type Erased       = ZIO[Any, Any]
   type ErasedFold   = Fold[Any, Any, Any, Any]
@@ -36,12 +36,12 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
 
   override def join: ZIO[E, A] =
     ZIO
-      .async[Either[E, A]] { callback =>
+      .async[Exit[E, A]] { callback =>
         await(callback)
       }
-      .flatMap(ZIO.fromEither)
+      .flatMap(ZIO.done)
 
-  def await(callback: Either[E, A] => Any): Unit = {
+  def await(callback: Exit[E, A] => Any): Unit = {
     var loopState = true
     while (loopState) {
       state.get() match {
@@ -59,7 +59,7 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
     }
   }
 
-  def complete(result: Either[E, A]): Unit = {
+  def complete(result: Exit[E, A]): Unit = {
     var loopState = true
     while (loopState) {
       state.get() match {
@@ -110,8 +110,8 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
     def continue(value: Any): Unit =
       if (stack.isEmpty) {
         loopStack = false
-        complete(Right(value.asInstanceOf[A]))
-        println(s"[FiberContext] - complete with ${Right(value.asInstanceOf[A])}")
+        complete(Exit.succeed(value.asInstanceOf[A]))
+        println(s"[FiberContext] - complete with ${Exit.succeed(value.asInstanceOf[A])}")
       }
       else {
         val continuation = stack.pop()
@@ -127,7 +127,7 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
           loopStack = false
           if (stack.isEmpty) {
             register { a =>
-              complete(Right(a.asInstanceOf[A]))
+              complete(Exit.succeed(a.asInstanceOf[A]))
             }
           }
           else {
@@ -140,7 +140,7 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
         case ZIO.Fail(e) =>
           val errorHandler = findNextErrorHandler()
           if (errorHandler eq null) {
-            complete(Left(e().asInstanceOf[E]))
+            complete(Exit.fail(e().asInstanceOf[E]))
           }
           else {
             currentZIO = errorHandler.failure(e())
