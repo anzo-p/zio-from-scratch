@@ -120,53 +120,58 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
       }
 
     while (loopStack) {
-      println(s"[FiberContext] - run current zio - $currentZIO")
-      currentZIO match {
+      try {
+        println(s"[FiberContext] - run current zio - $currentZIO")
+        currentZIO match {
 
-        case ZIO.Async(register) =>
-          loopStack = false
-          if (stack.isEmpty) {
-            register { a =>
-              complete(Exit.succeed(a.asInstanceOf[A]))
+          case ZIO.Async(register) =>
+            loopStack = false
+            if (stack.isEmpty) {
+              register { a =>
+                complete(Exit.succeed(a.asInstanceOf[A]))
+              }
             }
-          }
-          else {
-            register { a =>
-              currentZIO = ZIO.succeedNow(a)
-              run()
+            else {
+              register { a =>
+                currentZIO = ZIO.succeedNow(a)
+                run()
+              }
             }
-          }
 
-        case ZIO.Fail(e) =>
-          val errorHandler = findNextErrorHandler()
-          if (errorHandler eq null) {
-            complete(Exit.fail(e().asInstanceOf[E]))
-          }
-          else {
-            currentZIO = errorHandler.failure(e())
-          }
+          case ZIO.Fail(e) =>
+            val errorHandler = findNextErrorHandler()
+            if (errorHandler eq null) {
+              complete(Exit.fail(e().asInstanceOf[E]))
+            }
+            else {
+              currentZIO = errorHandler.failure(e())
+            }
 
-        case ZIO.FlatMap(zio, continuation) =>
-          stack.push(continuation.asInstanceOf[Continuation])
-          currentZIO = zio
+          case ZIO.FlatMap(zio, continuation) =>
+            stack.push(continuation.asInstanceOf[Continuation])
+            currentZIO = zio
 
-        case fold @ ZIO.Fold(zio, _, _) =>
-          stack.push(fold)
-          currentZIO = zio
+          case fold @ ZIO.Fold(zio, _, _) =>
+            stack.push(fold)
+            currentZIO = zio
 
-        case ZIO.Fork(zio) =>
-          val fiber = new FiberContext(zio, currentExecutor)
-          continue(fiber)
+          case ZIO.Fork(zio) =>
+            val fiber = new FiberContext(zio, currentExecutor)
+            continue(fiber)
 
-        case ZIO.Shift(executor) =>
-          currentExecutor = executor
-          continue(())
+          case ZIO.Shift(executor) =>
+            currentExecutor = executor
+            continue(())
 
-        case ZIO.Succeed(thunk) =>
-          continue(thunk())
+          case ZIO.Succeed(thunk) =>
+            continue(thunk())
 
-        case ZIO.SucceedNow(value) =>
-          continue(value)
+          case ZIO.SucceedNow(value) =>
+            continue(value)
+        }
+      } catch {
+        case t: Throwable =>
+          currentZIO = ZIO.fail(Cause.Die(t))
       }
     }
   }
