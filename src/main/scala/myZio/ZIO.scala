@@ -84,6 +84,9 @@ sealed trait ZIO[-R, +E, +A] { self =>
       ZIO.succeedNow(f(a))
     }
 
+  def provide(r: R): ZIO[Any, E, A] =
+    ZIO.Provide(self, r)
+
   def repeatN(n: Int): ZIO[R, E, Unit] =
     if (n <= 0) ZIO.succeedNow()
     else self *> repeatN(n - 1)
@@ -125,6 +128,8 @@ object ZIO {
 
   sealed trait ZIOPrimitive
 
+  case class Access[R, E, A](f: R => ZIO[R, E, A]) extends ZIOPrimitive with ZIO[R, E, A]
+
   case class Async[A](register: (A => Any) => Any) extends ZIOPrimitive with ZIO[Any, Nothing, A]
 
   case class Fail[E](e: () => Cause[E]) extends ZIOPrimitive with ZIO[Any, E, Nothing]
@@ -141,6 +146,8 @@ object ZIO {
 
   case class Fork[R, E, A](zio: ZIO[R, E, A]) extends ZIOPrimitive with ZIO[R, Nothing, Fiber[E, A]]
 
+  case class Provide[R, E, A](zio: ZIO[R, E, A], environment: R) extends ZIOPrimitive with ZIO[Any, E, A]
+
   case class SetInterruptStatus[R, E, A](self: ZIO[R, E, A], status: InterruptStatus)
       extends ZIOPrimitive
       with ZIO[R, E, A]
@@ -150,6 +157,9 @@ object ZIO {
   case class Succeed[A](f: () => A) extends ZIOPrimitive with ZIO[Any, Nothing, A]
 
   case class SucceedNow[A](a: A) extends ZIOPrimitive with ZIO[Any, Nothing, A]
+
+  def accessZIO[R, E, A](f: R => ZIO[R, E, A]): ZIO[R, E, A] =
+    Access(f)
 
   def async[A](register: (A => Any) => Any): ZIO[Any, Nothing, A] =
     Async(register)

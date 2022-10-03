@@ -37,8 +37,11 @@ private class FiberContext[E, A](zio: ZIO[Any, E, A], initExecutor: ExecutionCon
   val isInterruptible =
     new AtomicBoolean(true)
 
-  val stack =
+  val continuationStack =
     new mutable.Stack[Continuation]()
+
+  val environmentStack =
+    new mutable.Stack[Any]()
 
   val state =
     new AtomicReference[FiberState](Running(List.empty))
@@ -99,11 +102,11 @@ private class FiberContext[E, A](zio: ZIO[Any, E, A], initExecutor: ExecutionCon
     var loopStack                = true
     var errorHandler: ErasedFold = null
     while (loopStack) {
-      if (stack.isEmpty) {
+      if (continuationStack.isEmpty) {
         loopStack = false
       }
       else {
-        stack.pop() match {
+        continuationStack.pop() match {
           case foldType: ErasedFold =>
             errorHandler = foldType
             loopStack    = false
@@ -121,13 +124,13 @@ private class FiberContext[E, A](zio: ZIO[Any, E, A], initExecutor: ExecutionCon
     var loopStack = true
 
     def continue(value: Any): Unit =
-      if (stack.isEmpty) {
+      if (continuationStack.isEmpty) {
         loopStack = false
         complete(Exit.succeed(value.asInstanceOf[A]))
         println(s"[FiberContext] - complete with ${Exit.succeed(value.asInstanceOf[A])}")
       }
       else {
-        val continuation = stack.pop()
+        val continuation = continuationStack.pop()
         currentZIO = continuation(value)
         println(s"[FiberContext] - continue with $currentZIO")
       }
@@ -135,7 +138,7 @@ private class FiberContext[E, A](zio: ZIO[Any, E, A], initExecutor: ExecutionCon
     while (loopStack) {
       if (shouldInterrupt()) {
         isFinalising.set(true)
-        stack.push(_ => currentZIO)
+        continuationStack.push(_ => currentZIO)
         currentZIO = ZIO.failCause(Cause.Interrupt)
       }
       else {
@@ -143,9 +146,12 @@ private class FiberContext[E, A](zio: ZIO[Any, E, A], initExecutor: ExecutionCon
           println(s"[FiberContext] - run current zio - $currentZIO")
           currentZIO match {
 
+            case ZIO.Access(f) =>
+              currentZIO = f(environmentStack.head)
+
             case ZIO.Async(register) =>
               loopStack = false
-              if (stack.isEmpty) {
+              if (continuationStack.isEmpty) {
                 register { a =>
                   complete(Exit.succeed(a.asInstanceOf[A]))
                 }
@@ -168,16 +174,20 @@ private class FiberContext[E, A](zio: ZIO[Any, E, A], initExecutor: ExecutionCon
               }
 
             case ZIO.FlatMap(zio, continuation) =>
-              stack.push(continuation.asInstanceOf[Continuation])
+              continuationStack.push(continuation.asInstanceOf[Continuation])
               currentZIO = zio
 
             case fold @ ZIO.Fold(zio, _, _) =>
-              stack.push(fold)
+              continuationStack.push(fold)
               currentZIO = zio
 
             case ZIO.Fork(zio) =>
               val fiber = new FiberContext(zio, currentExecutor)
               continue(fiber)
+
+            case ZIO.Provide(zio, environment) =>
+              environmentStack.push(environment)
+              currentZIO = zio.ensuring(ZIO.succeed(environmentStack.pop())).asInstanceOf[Erased]
 
             case ZIO.SetInterruptStatus(zio, status) =>
               val oldIsInterruptible = isInterruptible.get()
