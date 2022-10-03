@@ -74,6 +74,9 @@ sealed trait ZIO[+E, +A] { self =>
   def fork: ZIO[Nothing, Fiber[E, A]] =
     ZIO.Fork(self)
 
+  def interruptible: ZIO[E, A] =
+    setInterruptStatus(InterruptStatus.Interruptible)
+
   def map[B](f: A => B): ZIO[E, B] =
     flatMap { a =>
       ZIO.succeedNow(f(a))
@@ -83,8 +86,14 @@ sealed trait ZIO[+E, +A] { self =>
     if (n <= 0) ZIO.succeedNow()
     else self *> repeatN(n - 1)
 
+  def setInterruptStatus(status: InterruptStatus): ZIO[E, A] =
+    ZIO.SetInterruptStatus(self, status)
+
   def shift(executor: ExecutionContext): ZIO[Nothing, Unit] =
     ZIO.Shift(executor)
+
+  def unInterruptible: ZIO[E, A] =
+    setInterruptStatus(InterruptStatus.UnInterruptible)
 
   def zip[E1 >: E, B](that: ZIO[E1, B]): ZIO[E1, (A, B)] =
     zipWith(that)(_ -> _)
@@ -125,6 +134,8 @@ object ZIO {
   }
 
   case class Fork[E, A](zio: ZIO[E, A]) extends ZIO[Nothing, Fiber[E, A]]
+
+  case class SetInterruptStatus[E, A](self: ZIO[E, A], status: InterruptStatus) extends ZIO[E, A]
 
   case class Shift(executor: ExecutionContext) extends ZIO[Nothing, Unit]
 

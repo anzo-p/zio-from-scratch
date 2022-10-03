@@ -33,6 +33,9 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
   val isInterrupted =
     new AtomicBoolean(false)
 
+  val isInterruptible =
+    new AtomicBoolean(true)
+
   val stack =
     new mutable.Stack[Continuation]()
 
@@ -156,7 +159,7 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
             case ZIO.Fail(e) =>
               val errorHandler = findNextErrorHandler()
               if (errorHandler eq null) {
-                loopStack = false // without this we are running loop eternally, but why not quit as we intend to exit?
+                loopStack = false
                 complete(Exit.fail(e().asInstanceOf[E]))
               }
               else {
@@ -174,6 +177,11 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
             case ZIO.Fork(zio) =>
               val fiber = new FiberContext(zio, currentExecutor)
               continue(fiber)
+
+            case ZIO.SetInterruptStatus(zio, status) =>
+              val oldIsInterruptible = isInterruptible.get()
+              isInterruptible.set(status.toBoolean)
+              currentZIO = zio.ensuring(ZIO.succeed(isInterruptible.set(oldIsInterruptible)))
 
             case ZIO.Shift(executor) =>
               currentExecutor = executor
@@ -194,7 +202,7 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
   }
 
   def shouldInterrupt(): Boolean =
-    isInterrupted.get() && !isFinalising.get()
+    isInterruptible.get() && isInterrupted.get() && !isFinalising.get()
 
   currentExecutor.execute { () =>
     run()
