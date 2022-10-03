@@ -2,7 +2,7 @@ package myZio
 
 import myZio.ZIO.Fold
 
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext
 
@@ -27,12 +27,21 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
 
   var currentZIO: Erased = erase(zio)
 
-  val stack = new mutable.Stack[Continuation]()
+  val isFinalising =
+    new AtomicBoolean(false)
 
-  val state: AtomicReference[FiberState] =
-    new AtomicReference(Running(List.empty))
+  val isInterrupted =
+    new AtomicBoolean(false)
 
-  override def interrupt: ZIO[Nothing, Unit] = ???
+  val stack =
+    new mutable.Stack[Continuation]()
+
+  val state =
+    new AtomicReference[FiberState](Running(List.empty))
+
+  override def interrupt: ZIO[Nothing, Unit] = {
+    ZIO.succeedNow(isInterrupted.set(true))
+  }
 
   override def join: ZIO[E, A] =
     ZIO
@@ -120,61 +129,72 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
       }
 
     while (loopStack) {
-      try {
-        println(s"[FiberContext] - run current zio - $currentZIO")
-        currentZIO match {
+      if (shouldInterrupt()) {
+        isFinalising.set(true)
+        stack.push(_ => currentZIO)
+        currentZIO = ZIO.failCause(Cause.Interrupt)
+      }
+      else {
+        try {
+          println(s"[FiberContext] - run current zio - $currentZIO")
+          currentZIO match {
 
-          case ZIO.Async(register) =>
-            loopStack = false
-            if (stack.isEmpty) {
-              register { a =>
-                complete(Exit.succeed(a.asInstanceOf[A]))
+            case ZIO.Async(register) =>
+              loopStack = false
+              if (stack.isEmpty) {
+                register { a =>
+                  complete(Exit.succeed(a.asInstanceOf[A]))
+                }
               }
-            }
-            else {
-              register { a =>
-                currentZIO = ZIO.succeedNow(a)
-                run()
+              else {
+                register { a =>
+                  currentZIO = ZIO.succeedNow(a)
+                  run()
+                }
               }
-            }
 
-          case ZIO.Fail(e) =>
-            val errorHandler = findNextErrorHandler()
-            if (errorHandler eq null) {
-              complete(Exit.fail(e().asInstanceOf[E]))
-            }
-            else {
-              currentZIO = errorHandler.failure(e())
-            }
+            case ZIO.Fail(e) =>
+              val errorHandler = findNextErrorHandler()
+              if (errorHandler eq null) {
+                loopStack = false // without this we are running loop eternally, but why not quit as we intend to exit?
+                complete(Exit.fail(e().asInstanceOf[E]))
+              }
+              else {
+                currentZIO = errorHandler.failure(e())
+              }
 
-          case ZIO.FlatMap(zio, continuation) =>
-            stack.push(continuation.asInstanceOf[Continuation])
-            currentZIO = zio
+            case ZIO.FlatMap(zio, continuation) =>
+              stack.push(continuation.asInstanceOf[Continuation])
+              currentZIO = zio
 
-          case fold @ ZIO.Fold(zio, _, _) =>
-            stack.push(fold)
-            currentZIO = zio
+            case fold @ ZIO.Fold(zio, _, _) =>
+              stack.push(fold)
+              currentZIO = zio
 
-          case ZIO.Fork(zio) =>
-            val fiber = new FiberContext(zio, currentExecutor)
-            continue(fiber)
+            case ZIO.Fork(zio) =>
+              val fiber = new FiberContext(zio, currentExecutor)
+              continue(fiber)
 
-          case ZIO.Shift(executor) =>
-            currentExecutor = executor
-            continue(())
+            case ZIO.Shift(executor) =>
+              currentExecutor = executor
+              continue(())
 
-          case ZIO.Succeed(thunk) =>
-            continue(thunk())
+            case ZIO.Succeed(thunk) =>
+              continue(thunk())
 
-          case ZIO.SucceedNow(value) =>
-            continue(value)
+            case ZIO.SucceedNow(value) =>
+              continue(value)
+          }
+        } catch {
+          case t: Throwable =>
+            currentZIO = ZIO.fail(Cause.Die(t))
         }
-      } catch {
-        case t: Throwable =>
-          currentZIO = ZIO.fail(Cause.Die(t))
       }
     }
   }
+
+  def shouldInterrupt(): Boolean =
+    isInterrupted.get() && !isFinalising.get()
 
   currentExecutor.execute { () =>
     run()

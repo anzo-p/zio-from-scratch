@@ -39,6 +39,12 @@ sealed trait ZIO[+E, +A] { self =>
       a => ZIO.succeedNow(a)
     )
 
+  def ensuring(finalizer: ZIO[Nothing, Any]): ZIO[E, A] =
+    foldCauseZIO(
+      cause => finalizer *> ZIO.failCause(cause),
+      a => finalizer *> ZIO.succeedNow(a)
+    )
+
   def flatMap[E1 >: E, B](f: A => ZIO[E1, B]): ZIO[E1, B] =
     ZIO.FlatMap(self, f)
 
@@ -48,16 +54,22 @@ sealed trait ZIO[+E, +A] { self =>
       a => ZIO.succeedNow(success(a))
     )
 
-  def foldZIO[EU, B](failure: E => ZIO[EU, B], success: A => ZIO[EU, B]): ZIO[EU, B] =
-    foldCauseZIO({
-      case Cause.Fail(e) =>
-        failure(e)
-      case Cause.Die(throwable) =>
-        ZIO.failCause(Cause.Die(throwable))
-    }, success)
-
   def foldCauseZIO[EU, B](failure: Cause[E] => ZIO[EU, B], success: A => ZIO[EU, B]): ZIO[EU, B] =
     ZIO.Fold(self, failure, success)
+
+  def foldZIO[EU, B](failure: E => ZIO[EU, B], success: A => ZIO[EU, B]): ZIO[EU, B] =
+    foldCauseZIO(
+      {
+        case Cause.Fail(e) =>
+          failure(e)
+        case Cause.Die(throwable) =>
+          ZIO.failCause(Cause.Die(throwable))
+      },
+      success
+    )
+
+  def forever: ZIO[E, Nothing] =
+    self *> self.forever
 
   def fork: ZIO[Nothing, Fiber[E, A]] =
     ZIO.Fork(self)
