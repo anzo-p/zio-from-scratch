@@ -1,5 +1,7 @@
 package myZio
 
+import myZio.types.{Cause, Exit, InterruptStatus}
+
 import java.util.concurrent.CountDownLatch
 import scala.concurrent.ExecutionContext
 
@@ -30,8 +32,8 @@ sealed trait ZIO[+E, +A] { self =>
     result
   }
 
-  def as[B](value: => B): ZIO[E, B] =
-    self.map(_ => value)
+  def as[B](a: => B): ZIO[E, B] =
+    self.map(_ => a)
 
   def catchAll[EU, A1 >: A](f: E => ZIO[EU, A1]): ZIO[EU, A1] =
     foldZIO(
@@ -121,27 +123,31 @@ sealed trait ZIO[+E, +A] { self =>
 object ZIO {
   private val defaultExecutor = ExecutionContext.global
 
-  case class Async[A](register: (A => Any) => Any) extends ZIO[Nothing, A]
+  sealed trait ZIOPrimitive
 
-  case class Fail[E](e: () => Cause[E]) extends ZIO[E, Nothing]
+  case class Async[A](register: (A => Any) => Any) extends ZIOPrimitive with ZIO[Nothing, A]
 
-  case class FlatMap[E, A, B](zio: ZIO[E, A], f: A => ZIO[E, B]) extends ZIO[E, B]
+  case class Fail[E](e: () => Cause[E]) extends ZIOPrimitive with ZIO[E, Nothing]
+
+  case class FlatMap[E, A, B](zio: ZIO[E, A], f: A => ZIO[E, B]) extends ZIOPrimitive with ZIO[E, B]
 
   case class Fold[E, EU, A, B](zio: ZIO[E, A], failure: Cause[E] => ZIO[EU, B], success: A => ZIO[EU, B])
-      extends ZIO[EU, B]
+      extends ZIOPrimitive
+      with ZIO[EU, B]
       with (A => ZIO[EU, B]) {
+
     override def apply(a: A): ZIO[EU, B] = success(a)
   }
 
-  case class Fork[E, A](zio: ZIO[E, A]) extends ZIO[Nothing, Fiber[E, A]]
+  case class Fork[E, A](zio: ZIO[E, A]) extends ZIOPrimitive with ZIO[Nothing, Fiber[E, A]]
 
-  case class SetInterruptStatus[E, A](self: ZIO[E, A], status: InterruptStatus) extends ZIO[E, A]
+  case class SetInterruptStatus[E, A](self: ZIO[E, A], status: InterruptStatus) extends ZIOPrimitive with ZIO[E, A]
 
-  case class Shift(executor: ExecutionContext) extends ZIO[Nothing, Unit]
+  case class Shift(executor: ExecutionContext) extends ZIOPrimitive with ZIO[Nothing, Unit]
 
-  case class Succeed[A](f: () => A) extends ZIO[Nothing, A]
+  case class Succeed[A](f: () => A) extends ZIOPrimitive with ZIO[Nothing, A]
 
-  case class SucceedNow[A](value: A) extends ZIO[Nothing, A]
+  case class SucceedNow[A](a: A) extends ZIOPrimitive with ZIO[Nothing, A]
 
   def async[A](register: (A => Any) => Any): ZIO[Nothing, A] =
     Async(register)
@@ -166,10 +172,10 @@ object ZIO {
       a => succeedNow(a)
     )
 
-  def succeed[A](value: => A): ZIO[Nothing, A] =
-    Succeed(() => value)
+  def succeed[A](a: => A): ZIO[Nothing, A] =
+    Succeed(() => a)
 
   // should be private
-  def succeedNow[A](value: A): ZIO[Nothing, A] =
-    SucceedNow(value)
+  def succeedNow[A](a: A): ZIO[Nothing, A] =
+    SucceedNow(a)
 }

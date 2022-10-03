@@ -1,6 +1,7 @@
 package myZio
 
 import myZio.ZIO.Fold
+import myZio.types.{Cause, Exit}
 
 import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 import scala.collection.mutable

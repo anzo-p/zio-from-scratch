@@ -1,6 +1,6 @@
-package myZio
+package myZio.types
 
-import myZio.InterruptStatus._
+import myZio.types.InterruptStatus._
 
 sealed trait InterruptStatus { self =>
 

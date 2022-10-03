@@ -1,4 +1,4 @@
-package myZio
+package myZio.types
 
 sealed trait Cause[+E]
 

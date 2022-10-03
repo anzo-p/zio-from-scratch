@@ -3,8 +3,8 @@ import myZio.{ZIO, ZIOApp}
 object AppInterruptability extends ZIOApp {
 
   val tick     = 20
-  val repeat   = 50
-  val lifetime = 2000
+  val repeat   = 7
+  val lifetime = 100
 
   val unInterruptible =
     (ZIO.succeed(println("urgent uninterruptible"))
