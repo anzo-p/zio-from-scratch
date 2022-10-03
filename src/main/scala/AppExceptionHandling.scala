@@ -1,7 +1,7 @@
 import myZio.{ZIO, ZIOApp}
 
 object AppExceptionHandling extends ZIOApp {
-  override def run: ZIO[Any, Int] =
+  override def run: ZIO[Any, Nothing, Int] =
     ZIO
       .succeed { throw new NoSuchMethodException("abcde") }
       .catchAll { _ =>

@@ -3,7 +3,7 @@ import myZio.{ZIO, ZIOApp}
 object AppInterruptability extends ZIOApp {
 
   val tick     = 20
-  val repeat   = 7
+  val repeat   = 4
   val lifetime = 100
 
   val unInterruptible =
@@ -20,7 +20,7 @@ object AppInterruptability extends ZIOApp {
   val finalizer =
     ZIO.succeed(println("finalizing"))
 
-  override def run: ZIO[Any, Any] =
+  override def run: ZIO[Any, Nothing, Any] =
     for {
       fib <- (unInterruptible *> interruptible).ensuring(finalizer).fork
       _   <- ZIO.succeed(Thread.sleep(lifetime))

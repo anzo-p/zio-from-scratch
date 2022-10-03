@@ -3,7 +3,7 @@ import myZio.{ZIO, ZIOApp}
 
 object AppAs extends ZIOApp {
 
-  override def run: ZIO[Nothing, Any] =
+  override def run: ZIO[Any, Nothing, Any] =
     ZIO
       .succeed(Cat("lizzy", 3))
       .flatMap { cat =>

@@ -2,7 +2,7 @@ import myZio.{ZIO, ZIOApp}
 
 object AppErrorHandling extends ZIOApp {
 
-  val failedProgram: ZIO[String, Unit] =
+  val failedProgram: ZIO[Any, Nothing, Unit] =
     ZIO
       .fail("Failed..")
       .flatMap(_ => ZIO.succeed(println("[App Main] - I must never echo")))
@@ -11,5 +11,5 @@ object AppErrorHandling extends ZIOApp {
       .catchAll(_ =>
         ZIO.succeed(println("[App Main] - The second error catch all mustn't echo because no subsequent errors..")))
 
-  override def run: ZIO[Any, Any] = failedProgram
+  override def run: ZIO[Any, Nothing, Any] = failedProgram
 }

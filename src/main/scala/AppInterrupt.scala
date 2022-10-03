@@ -2,11 +2,11 @@ import myZio.{ZIO, ZIOApp}
 
 object AppInterrupt extends ZIOApp {
 
-  val program: ZIO[Nothing, Unit] =
+  val program: ZIO[Any, Nothing, Unit] =
     (ZIO.succeed(println("[App Main] 10110011 11110001 00100001 00100110"))
       *> ZIO.succeed(Thread.sleep(300)))
 
-  override def run: ZIO[Any, Any] =
+  override def run: ZIO[Any, Nothing, Unit] =
     for {
       fib <- program
               .forever

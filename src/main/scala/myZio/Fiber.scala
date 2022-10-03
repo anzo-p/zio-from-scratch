@@ -9,19 +9,19 @@ import scala.concurrent.ExecutionContext
 
 sealed trait Fiber[+E, +A] {
 
-  def interrupt: ZIO[Nothing, Unit]
+  def interrupt: ZIO[Any, Nothing, Unit]
 
-  def join: ZIO[E, A]
+  def join: ZIO[Any, E, A]
 }
 
-private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext) extends Fiber[E, A] {
+private class FiberContext[E, A](zio: ZIO[Any, E, A], initExecutor: ExecutionContext) extends Fiber[E, A] {
 
   sealed trait FiberState
   final case class Running(callbacks: List[Exit[E, A] => Any]) extends FiberState
   final case class Done(result: Exit[E, A]) extends FiberState
 
-  type Erased       = ZIO[Any, Any]
-  type ErasedFold   = Fold[Any, Any, Any, Any]
+  type Erased       = ZIO[Any, Any, Any]
+  type ErasedFold   = Fold[Any, Any, Any, Any, Any]
   type Continuation = Any => Erased
 
   var currentExecutor: ExecutionContext = initExecutor
@@ -43,11 +43,11 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
   val state =
     new AtomicReference[FiberState](Running(List.empty))
 
-  override def interrupt: ZIO[Nothing, Unit] = {
+  override def interrupt: ZIO[Any, Nothing, Unit] = {
     ZIO.succeedNow(isInterrupted.set(true))
   }
 
-  override def join: ZIO[E, A] =
+  override def join: ZIO[Any, E, A] =
     ZIO
       .async[Exit[E, A]] { callback =>
         await(callback)
@@ -92,8 +92,8 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
     }
   }
 
-  def erase[E1 >: E, B](zio: ZIO[E1, B]): Erased =
-    zio
+  def erase[R, E1 >: E, B](zio: ZIO[R, E1, B]): Erased =
+    zio.asInstanceOf[Erased]
 
   def findNextErrorHandler(): ErasedFold = {
     var loopStack                = true
@@ -196,7 +196,7 @@ private class FiberContext[E, A](zio: ZIO[E, A], initExecutor: ExecutionContext)
           }
         } catch {
           case t: Throwable =>
-            currentZIO = ZIO.fail(Cause.Die(t))
+            currentZIO = ZIO.die(t)
         }
       }
     }

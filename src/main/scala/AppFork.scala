@@ -4,14 +4,14 @@ import scala.util.Random
 
 object AppFork extends ZIOApp {
 
-  def asyncZIO(n: Int): ZIO[Nothing, Int] = ZIO.async[Int] { complete =>
+  def asyncZIO(n: Int): ZIO[Any, Nothing, Int] = ZIO.async[Int] { complete =>
     println(s"[App Main] - async $n begins")
     Thread.sleep(1000 + Random.nextInt(1000))
     println(s"[App Main] - async $n has result")
     complete(Random.nextInt())
   }
 
-  override def run: ZIO[Nothing, String] =
+  override def run: ZIO[Any, Nothing, String] =
     for {
       fib1 <- asyncZIO(1).fork
       fib2 <- asyncZIO(2).fork
